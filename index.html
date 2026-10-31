@@ -450,9 +450,8 @@ function beginHold(){
   if(state==='inspect'){state='holdInsp';holdT=performance.now();setFace('hold');hintEl.textContent='Keep holding…';return;}
   if(state==='idle'){ if($('optInspect').checked){startInspection();return;} state='hold';holdT=performance.now();setFace('hold');hintEl.textContent='Keep holding…';show(0); }
 }
-function releaseHold(){
-  if(state==='hold'){ if(performance.now()-holdT>=250)startSolve(); else {state='idle';setFace('');hintEl.textContent=defaultHint();} }
-  else if(state==='holdInsp'){ if(performance.now()-holdT>=250)startSolve(); else {state='inspect';setFace('insp');} }
+function releaseHold(){ // letting go always starts the solve (quick tap or long hold both work)
+  if(state==='hold'||state==='holdInsp'){ startSolve(); }
 }
 function armLoop(){ if((state==='hold'||state==='holdInsp')&&performance.now()-holdT>=250){setFace('armed');hintEl.textContent='Release to GO!';} requestAnimationFrame(armLoop); }
 function startInspection(){
@@ -474,8 +473,13 @@ $('btnRedo').onclick=newScramble;
 
 /* input */
 let spaceDown=false;
-addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT')return; if(e.code==='Space'){e.preventDefault();if(spaceDown)return;spaceDown=true;beginHold();} });
-addEventListener('keyup',e=>{ if(e.code==='Space'){e.preventDefault();spaceDown=false;releaseHold();} });
+function keyTimer(e,down){ if(e.code!=='Space'&&e.key!==' ')return; const t=e.target&&e.target.tagName, ae=document.activeElement;
+  if(t==='INPUT'||t==='TEXTAREA'||(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')))return;
+  e.preventDefault(); e.stopPropagation();
+  if(document.activeElement&&document.activeElement.tagName==='BUTTON')document.activeElement.blur(); // don't let a focused button eat the space
+  if(down){ if(spaceDown)return; spaceDown=true; beginHold(); } else { spaceDown=false; releaseHold(); } }
+addEventListener('keydown',e=>keyTimer(e,true),true);  // capture phase — beats button/scroll defaults
+addEventListener('keyup',e=>keyTimer(e,false),true);
 face.addEventListener('pointerdown',e=>{e.preventDefault();face.setPointerCapture?.(e.pointerId);beginHold();});
 face.addEventListener('pointerup',e=>{e.preventDefault();releaseHold();});
 armLoop();
