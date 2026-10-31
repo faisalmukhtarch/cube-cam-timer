@@ -93,8 +93,13 @@ button:focus-visible,[tabindex]:focus-visible,input:focus-visible{outline:3px so
 
 /* camera */
 .cam{display:flex;flex-direction:column;gap:10px}
-.camview{position:relative;width:100%;aspect-ratio:4/3;background:var(--surface2);border-radius:11px;overflow:hidden;border:1.5px solid var(--line)}
+.camview{position:relative;width:100%;aspect-ratio:16/9;max-height:56vh;background:var(--surface2);border-radius:11px;overflow:hidden;border:1.5px solid var(--line)}
 .camview video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+/* focus box — the only area the motion is read from */
+.focusbox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:42%;height:66%;border:2.5px dashed color-mix(in srgb,var(--accent) 80%,#fff);border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.28);pointer-events:none;display:none}
+.focusbox.on{display:block}
+.focusbox span{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);font-size:11px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:3px 9px;border-radius:999px;white-space:nowrap}
+.calib{font-weight:800}
 .camoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:var(--muted);font-size:12.5px;font-weight:600;line-height:1.5}
 .motionbar{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden;border:1px solid var(--line)}
 .motionbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--go),var(--y),var(--stop));transition:width .08s linear}
@@ -209,8 +214,18 @@ body.bg-grad #time{text-shadow:0 0 22px color-mix(in srgb,var(--accent) 45%,tran
     <span class="goal">🎯 Goal <input id="goal" type="text" inputmode="decimal" placeholder="e.g. 20"> s</span>
   </div>
 
-  <div class="cols">
-    <div class="panel">
+  <div class="panel cam">
+    <h3>Camera <span class="r" id="camStatus">off</span></h3>
+    <div class="camview">
+      <video id="video" playsinline muted></video>
+      <div class="focusbox" id="focusbox"><span>aim your cube in this box</span></div>
+      <div class="camoff" id="camoff">Tap <b>📷 Camera</b> and the camera watches your cube — it <b>auto-starts</b> the timer when you move and <b>auto-stops</b> when you finish.</div>
+    </div>
+    <div class="motionbar"><i id="motionFill"></i></div>
+    <div class="camrow"><span>Motion</span><span class="pill" id="motionPct">0%</span><span class="calib" id="autoState"></span><span class="pill" id="turnLive" style="margin-left:auto;color:var(--g)"></span></div>
+  </div>
+
+  <div class="panel">
       <h3>Session stats <span class="r" id="statN">0 solves</span></h3>
       <div class="stats">
         <div class="stat"><div class="k" title="Your most recent solve time">Latest time</div><div class="v" id="sCur">—</div></div>
@@ -227,17 +242,6 @@ body.bg-grad #time{text-shadow:0 0 22px color-mix(in srgb,var(--accent) 45%,tran
         <div class="stat"><div class="k" title="Average turns per second — type move counts below (TPS)">Turns/sec</div><div class="v" id="sTps">—</div></div>
       </div>
       <canvas id="graph" aria-label="Progress graph of your solve times"></canvas>
-    </div>
-
-    <div class="panel cam">
-      <h3>Camera <span class="r" id="camStatus">off</span></h3>
-      <div class="camview">
-        <video id="video" playsinline muted></video>
-        <div class="camoff" id="camoff">Tap <b>📷 Camera</b> and the camera watches your cube — it <b>auto-starts</b> the timer when you move and <b>auto-stops</b> when you finish.</div>
-      </div>
-      <div class="motionbar"><i id="motionFill"></i></div>
-      <div class="camrow"><span>Motion</span><span class="pill" id="motionPct">0%</span><span id="autoState"></span><span class="pill" id="turnLive" style="margin-left:auto;color:var(--g)"></span></div>
-    </div>
   </div>
 
   <div class="panel">
@@ -478,12 +482,17 @@ armLoop();
 
 /* ---------- camera + motion ---------- */
 let stream=null,mcanvas=document.createElement('canvas'),mctx=mcanvas.getContext('2d',{willReadFrequently:true});
-let prev=null,motion=0,lowSince=0,highSince=0,running=false; mcanvas.width=64;mcanvas.height=48;
+let prev=null,motion=0,lowSince=0,highSince=0,running=false,noiseFloor=6; mcanvas.width=80;mcanvas.height=45;
 let turnCount=0,turnArmed=false,lastTurnAt=0; // camera turn-counting (motion-pulse estimate)
 function autoOn(){return $('optAuto').checked&&stream;}
-function detectTurn(pct){ // each burst of motion above the threshold = one estimated turn
-  if(!($('optTurns').checked&&stream&&state==='run'))return;
-  const hi=(+$('sens').value)+4, lo=Math.max(3,(+$('sens').value)*0.5), now=performance.now();
+// read motion ONLY inside the central focus box (matches the on-screen dashed box), ignoring background/body
+function roiDiff(cur){ const W=mcanvas.width,H=mcanvas.height, x0=(W*0.29)|0,x1=(W*0.71)|0,y0=(H*0.17)|0,y1=(H*0.83)|0; let d=0,n=0;
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){ const i=(y*W+x)*4; d+=Math.abs(cur[i]-prev[i])+Math.abs(cur[i+1]-prev[i+1])+Math.abs(cur[i+2]-prev[i+2]); n++; }
+  return n? Math.min(100,d/(n*3*255)*500) : 0; }
+// auto-calibrated thresholds: relative to the live "quiet" level, nudged by the sensitivity slider
+function thresholds(){ const bias=+$('sens').value; return { start: noiseFloor+7+bias*0.5, stop: noiseFloor+2.5+bias*0.18 }; }
+function detectTurn(pct){ if(!($('optTurns').checked&&stream&&state==='run'))return;
+  const hi=noiseFloor+8+(+$('sens').value)*0.4, lo=noiseFloor+3, now=performance.now();
   if(!turnArmed && pct>=hi && now-lastTurnAt>80){ turnCount++; turnArmed=true; lastTurnAt=now; $('turnLive').textContent='~'+turnCount+' turns'; }
   else if(turnArmed && pct<lo){ turnArmed=false; }
 }
@@ -492,23 +501,26 @@ async function toggleCam(){
   $('camoff').scrollIntoView({behavior:'smooth',block:'center'}); toast('Opening camera…');
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camUnavailable('<b>Camera isn\'t available here.</b><br>claude.ai blocks the camera inside shared pages — open this in a normal web browser (on a computer or phone with a webcam) to use it.');return;}
   try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:480}},audio:false});
-    const v=$('video'); v.srcObject=stream; await v.play(); $('camoff').hidden=true; $('camStatus').textContent='on'; $('camBtn').textContent='📷 Stop';
-    running=true; prev=null; motionLoop(); $('optAuto').checked=true; hintEl.textContent=defaultHint();
+    const v=$('video'); v.srcObject=stream; await v.play(); $('camoff').hidden=true; $('focusbox').classList.add('on'); $('camStatus').textContent='on'; $('camBtn').textContent='📷 Stop';
+    running=true; prev=null; noiseFloor=6; motionLoop(); $('optAuto').checked=true; hintEl.textContent=defaultHint(); toast('Camera on — aim the cube in the box');
   }catch(err){ camUnavailable('<b>Camera is blocked here.</b><br>claude.ai blocks the camera inside shared pages. Open this in a normal web browser (a computer or phone with a webcam) and tap 📷 Camera → <b>Allow</b> to use it.'); }
 }
-function camUnavailable(m){stream=null;$('camoff').hidden=false;$('camoff').innerHTML=m;$('camStatus').textContent='blocked here';$('optAuto').checked=false;$('optTurns').checked=false;toast('📷 Camera blocked here — use a normal browser');}
-function stopCam(){ if(stream)stream.getTracks().forEach(t=>t.stop()); stream=null;running=false;$('camoff').hidden=false;$('camStatus').textContent='off';$('camBtn').textContent='📷 Camera';$('motionFill').style.width='0%';$('motionPct').textContent='0%';$('autoState').textContent=''; }
-function motionLoop(){ if(!running)return; const v=$('video');
-  if(v.readyState>=2){ mctx.drawImage(v,0,0,64,48); const cur=mctx.getImageData(0,0,64,48).data;
-    if(prev){ let d=0; for(let i=0;i<cur.length;i+=4)d+=Math.abs(cur[i]-prev[i])+Math.abs(cur[i+1]-prev[i+1])+Math.abs(cur[i+2]-prev[i+2]);
-      const norm=d/(64*48*3*255)*600; motion=motion*0.6+Math.min(100,norm)*0.4; }
-    prev=cur.slice(0); const pct=Math.round(motion); $('motionFill').style.width=Math.min(100,pct)+'%'; $('motionPct').textContent=pct+'%'; autoTimer(pct); detectTurn(pct);
+function camUnavailable(m){stream=null;$('camoff').hidden=false;$('focusbox').classList.remove('on');$('camoff').innerHTML=m;$('camStatus').textContent='blocked here';$('optAuto').checked=false;$('optTurns').checked=false;toast('📷 Camera blocked here — use a normal browser');}
+function stopCam(){ if(stream)stream.getTracks().forEach(t=>t.stop()); stream=null;running=false;$('camoff').hidden=false;$('focusbox').classList.remove('on');$('camStatus').textContent='off';$('camBtn').textContent='📷 Camera';$('motionFill').style.width='0%';$('motionPct').textContent='0%';$('autoState').textContent='';$('turnLive').textContent=''; }
+function motionLoop(){ if(!running)return; const v=$('video'), W=mcanvas.width,H=mcanvas.height;
+  if(v.readyState>=2){ mctx.drawImage(v,0,0,W,H); const cur=mctx.getImageData(0,0,W,H).data;
+    if(prev){ motion=motion*0.55+roiDiff(cur)*0.45; }
+    prev=cur; const pct=Math.round(motion);
+    if(state==='idle') noiseFloor += (Math.min(pct,noiseFloor+2)-noiseFloor)*0.03; // slowly learn the quiet level
+    $('motionFill').style.width=Math.min(100,pct)+'%'; $('motionPct').textContent=pct+'%'; autoTimer(pct); detectTurn(pct);
   } requestAnimationFrame(motionLoop);
 }
-function autoTimer(pct){ if(!autoOn()){$('autoState').textContent='';return;} const thr=+$('sens').value,now=performance.now();
-  if(state==='run'){ $('autoState').textContent='· solving'; if(pct<thr){if(!lowSince)lowSince=now; if(now-lowSince>1100){stopSolve();lowSince=0;}}else lowSince=0; }
-  else if(state==='idle'){ $('autoState').textContent='· watching'; if(pct>thr+6){if(!highSince)highSince=now; if(now-highSince>120){startSolve();highSince=0;}}else highSince=0; }
-  else if(state==='inspect'||state==='holdInsp'){ $('autoState').textContent='· inspection'; if(pct>thr+6)startSolve(); }
+function autoTimer(pct){ if(!autoOn()){$('autoState').textContent='';return;} const T=thresholds(), now=performance.now();
+  if(state==='run'){ const elapsed=now-startAt; $('autoState').textContent='· solving';
+    if(elapsed>1200 && pct<T.stop){ if(!lowSince)lowSince=now; if(now-lowSince>2000){stopSolve();lowSince=0;} } else if(pct>=T.stop) lowSince=0; }
+  else if(state==='idle'){ $('autoState').textContent='· ready (auto-calibrated)';
+    if(pct>T.start){ if(!highSince)highSince=now; if(now-highSince>120){startSolve();highSince=0;} } else highSince=0; }
+  else if(state==='inspect'||state==='holdInsp'){ $('autoState').textContent='· inspection'; if(pct>T.start)startSolve(); }
 }
 $('camBtn').onclick=toggleCam;
 
