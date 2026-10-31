@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Cube Cam Timer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@500;700;800&display=swap">
+<style>
+/* Layout: a cubing station — pick a puzzle, read the scramble, hit the big tap-face, watch your WCA stats build. */
+:root{
+  --bg:#f3f4f8; --surface:#ffffff; --surface2:#eef0f6; --fg:#15171f; --muted:#5b6071; --line:#d9dce7;
+  --go:#009e60; --stop:#c41e3a; --accent:#0051ba; --hold:#ff8a00;
+  --w:#f8f8f8; --y:#ffd500; --r:#c41e3a; --o:#ff5a1f; --b:#0051ba; --g:#009e60;
+  --shadow:0 2px 14px rgba(20,24,40,.08);
+  --disp:"Sora",system-ui,sans-serif; --body:"DM Sans",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e0f16; --surface:#181a24; --surface2:#20222f; --fg:#eef0f6; --muted:#9aa0b4; --line:#2c2f3d;
+  --shadow:0 2px 18px rgba(0,0,0,.4); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e0f16; --surface:#181a24; --surface2:#20222f; --fg:#eef0f6; --muted:#9aa0b4; --line:#2c2f3d;
+  --shadow:0 2px 18px rgba(0,0,0,.4); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 34px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--disp);margin:0;text-wrap:balance}
+button{font-family:var(--body);cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.cubeico{width:30px;height:30px;border-radius:7px;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:1.5px;background:#111;padding:2px;flex:0 0 auto}
+.cubeico i{border-radius:2px}
+.brand h1{font-size:19px;font-weight:800;letter-spacing:-.2px}
+.brand .sub{font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.tbtn{background:var(--surface);border:1.5px solid var(--line);color:var(--fg);border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px}
+.tbtn.sm{padding:6px 10px;font-size:12px}
+
+/* event tabs */
+.events{display:flex;gap:6px;flex-wrap:wrap}
+.events button{background:var(--surface2);border:1.5px solid var(--line);color:var(--muted);border-radius:999px;padding:6px 13px;font-weight:800;font-size:12px}
+.events button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* scramble */
+.scram{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px}
+.scram .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:800;flex:0 0 auto}
+#scramText{font-family:var(--mono);font-weight:700;font-size:clamp(13px,2.5vw,19px);letter-spacing:.02em;flex:1;min-width:0;line-height:1.55;font-variant-numeric:tabular-nums}
+#scramText .mv{display:inline-block;margin:0 .14em}
+
+/* timer face */
+.face{position:relative;background:var(--surface);border:2px solid var(--line);border-radius:20px;box-shadow:var(--shadow);
+  min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;user-select:none;-webkit-user-select:none;touch-action:none;transition:border-color .12s,background .12s}
+.face.hold{border-color:var(--hold);background:color-mix(in srgb,var(--hold) 12%,var(--surface))}
+.face.armed{border-color:var(--go);background:color-mix(in srgb,var(--go) 14%,var(--surface))}
+.face.run{border-color:var(--accent)}
+.face.insp{border-color:var(--y)}
+#time{font-family:var(--mono);font-weight:800;font-size:calc(clamp(54px,15vw,116px)*var(--timeScale,1));line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.facehint{font-size:13px;color:var(--muted);font-weight:600;min-height:18px;text-align:center;padding:0 14px}
+.penrow{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.penrow button{background:var(--surface2);border:1.5px solid var(--line);color:var(--fg);border-radius:9px;padding:5px 12px;font-weight:800;font-size:12px}
+
+.settings{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.toggle{display:inline-flex;align-items:center;gap:7px;background:var(--surface2);border:1.5px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--fg)}
+.toggle input{accent-color:var(--go);width:16px;height:16px}
+.sens{display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1.5px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700}
+.sens input[type=range]{accent-color:var(--accent)}
+.goal{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1.5px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700}
+.goal input{width:60px;background:var(--surface);border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:3px 6px;font-family:var(--mono);font-weight:700;text-align:center}
+
+.cols{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:780px){.cols{grid-template-columns:1.25fr .75fr}}
+.panel{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px;min-width:0}
+.panel h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.panel h3 .r{margin-left:auto;font-weight:700;text-transform:none;letter-spacing:0;color:var(--muted)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.stat{background:var(--surface2);border-radius:11px;padding:10px 7px;text-align:center}
+.stat .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800}
+.stat .v{font-family:var(--mono);font-weight:800;font-size:clamp(15px,3.8vw,21px);margin-top:3px;font-variant-numeric:tabular-nums}
+.stat.pb .v{color:var(--go)} .stat.ao5 .v{color:var(--accent)} .stat.ao12 .v{color:var(--o)}
+.stat.beat .v{color:var(--go)} .stat.miss .v{color:var(--stop)}
+
+/* graph */
+#graph{width:100%;height:92px;display:block;background:var(--surface2);border-radius:11px;border:1px solid var(--line);margin-top:10px}
+
+/* camera */
+.cam{display:flex;flex-direction:column;gap:10px}
+.camview{position:relative;width:100%;aspect-ratio:4/3;background:var(--surface2);border-radius:11px;overflow:hidden;border:1.5px solid var(--line)}
+.camview video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+.camoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:var(--muted);font-size:12.5px;font-weight:600;line-height:1.5}
+.motionbar{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden;border:1px solid var(--line)}
+.motionbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--go),var(--y),var(--stop));transition:width .08s linear}
+.camrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.camrow .pill{font-weight:800;color:var(--fg)}
+
+/* history */
+.histhead{display:flex;gap:10px;align-items:center}
+.hist{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-width:0;margin-top:10px}
+.hrow{display:grid;grid-template-columns:26px 1fr auto;align-items:center;gap:8px;background:var(--surface2);border-radius:9px;padding:7px 10px}
+.hrow .n{font-size:11px;color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.hrow .t{font-family:var(--mono);font-weight:800;font-size:16px;font-variant-numeric:tabular-nums}
+.hrow .t.dnf{color:var(--stop);text-decoration:line-through}
+.hrow .t.pb{color:var(--go)}
+.hrow .meta{font-size:11px;color:var(--muted);margin-left:8px;font-weight:600}
+.hrow .acts{display:flex;gap:4px;align-items:center}
+.hrow .acts button{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:7px;padding:3px 7px;font-size:11px;font-weight:800}
+.hrow .acts button.on{background:var(--hold);color:#15171f;border-color:var(--hold)}
+.hrow .acts button.on.dnf{background:var(--stop);color:#fff;border-color:var(--stop)}
+.mv{width:50px;background:var(--surface);border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:3px 6px;font-family:var(--mono);font-weight:700;font-size:12px;text-align:center}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:18px 4px}
+.link{background:none;border:none;color:var(--accent);font-size:11px;font-weight:800;text-decoration:underline;cursor:pointer}
+.tps{color:var(--g);font-weight:800}
+
+/* help */
+details.help{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:4px 14px}
+details.help>summary{font-family:var(--disp);font-weight:800;font-size:14px;cursor:pointer;padding:12px 0;list-style:none}
+details.help>summary::-webkit-details-marker{display:none}
+details.help>summary::before{content:"❔ ";}
+.helpgrid{display:grid;grid-template-columns:1fr;gap:12px;padding:4px 0 16px}
+@media(min-width:620px){.helpgrid{grid-template-columns:1fr 1fr}}
+.hcard{background:var(--surface2);border-radius:11px;padding:12px 13px}
+.hcard b{font-family:var(--disp);font-size:13px}
+.hcard p{margin:5px 0 0;font-size:12.5px;color:var(--muted);line-height:1.55}
+.hcard code{font-family:var(--mono);font-weight:700;color:var(--fg);background:var(--surface);padding:1px 5px;border-radius:5px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+.legend i{width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.25)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);font-weight:800;font-size:13px;padding:9px 16px;border-radius:999px;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+.toast.show{opacity:1}
+/* customizable backgrounds */
+body.bg-grad{background:
+  radial-gradient(900px 520px at 8% -8%, color-mix(in srgb,var(--accent) 42%,transparent), transparent 58%),
+  radial-gradient(800px 480px at 112% 4%, color-mix(in srgb,var(--accent) 34%,transparent), transparent 55%),
+  radial-gradient(900px 520px at 50% 115%, color-mix(in srgb,var(--accent) 26%,transparent), transparent 60%), var(--bg)}
+body.bg-dots{background-image:radial-gradient(color-mix(in srgb,var(--accent) 30%,transparent) 1.5px, transparent 1.6px);background-size:18px 18px;background-color:var(--bg)}
+/* the Glow look also lights up the timer + cards */
+body.bg-grad .face{box-shadow:0 0 30px color-mix(in srgb,var(--accent) 22%,transparent), var(--shadow)}
+body.bg-grad #time{text-shadow:0 0 22px color-mix(in srgb,var(--accent) 45%,transparent)}
+/* customize modal */
+.modal{position:fixed;inset:0;background:rgba(10,12,20,.55);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
+.modal.on{display:flex}
+.sheet{background:var(--surface);border:1.5px solid var(--line);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.35);width:min(460px,100%);max-height:88vh;overflow:auto;padding:18px}
+.sheet h2{font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px}
+.sheet .x{margin-left:auto;background:var(--surface2);border:1.5px solid var(--line);color:var(--fg);border-radius:9px;width:32px;height:32px;font-weight:800;font-size:16px}
+.crow{margin-top:16px}
+.crow .t{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800;margin-bottom:8px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.swatch{width:30px;height:30px;border-radius:9px;border:2px solid transparent;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.swatch.on{border-color:var(--fg)}
+.swatch.custom{display:grid;place-items:center;background:var(--surface2);font-size:15px}
+.swatch.custom input{opacity:0;position:absolute;width:30px;height:30px;cursor:pointer}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:80px;background:var(--surface2);border:1.5px solid var(--line);color:var(--fg);border-radius:10px;padding:9px;font-weight:800;font-size:13px}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.crow input[type=range]{width:100%;accent-color:var(--accent)}
+.resetrow{display:flex;gap:8px;margin-top:18px}
+.resetrow button{flex:1;border-radius:10px;padding:10px;font-weight:800;font-size:13px;cursor:pointer}
+.resetrow .reset{background:var(--surface2);border:1.5px solid var(--line);color:var(--fg)}
+.resetrow .done{background:var(--accent);border:1.5px solid var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <div class="cubeico" id="cubeico"></div>
+      <div>
+        <h1>Cube Cam Timer</h1>
+        <div class="sub">WCA stats · camera auto-start · 7 puzzles</div>
+      </div>
+    </div>
+    <button class="tbtn sm" id="camBtn">📷 Camera</button>
+    <button class="tbtn sm" id="customBtn">🎨 Customize</button>
+    <button class="tbtn sm" id="themeBtn">🌙 Theme</button>
+  </div>
+
+  <div class="events" id="events"></div>
+
+  <div class="scram">
+    <span class="lbl">Scramble</span>
+    <span id="scramText"></span>
+    <button class="tbtn sm" id="newScram">↻ New</button>
+  </div>
+
+  <div class="face" id="face" tabindex="0" role="button" aria-label="Timer — hold then release to start, press to stop">
+    <div id="time">0.00</div>
+    <div class="facehint" id="hint">Hold Space (or press &amp; hold here), release to start</div>
+    <div class="penrow" id="penrow" hidden>
+      <button id="btnPlus2">+2</button>
+      <button id="btnDNF">DNF</button>
+      <button id="btnRedo">↻ New scramble</button>
+    </div>
+  </div>
+
+  <div class="settings">
+    <label class="toggle"><input type="checkbox" id="optInspect"> 15s inspection</label>
+    <label class="toggle"><input type="checkbox" id="optAuto"> 📷 Camera auto start/stop</label>
+    <label class="toggle"><input type="checkbox" id="optTurns"> 🔢 Count turns from camera <span style="color:var(--muted);font-weight:600">(estimate)</span></label>
+    <span class="sens">Motion sensitivity <input type="range" id="sens" min="4" max="40" value="16" style="width:84px"></span>
+    <span class="goal">🎯 Goal <input id="goal" type="text" inputmode="decimal" placeholder="e.g. 20"> s</span>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <h3>Session stats <span class="r" id="statN">0 solves</span></h3>
+      <div class="stats">
+        <div class="stat"><div class="k" title="Your most recent solve time">Latest time</div><div class="v" id="sCur">—</div></div>
+        <div class="stat pb"><div class="k" title="Your fastest single solve this session (PB single)">Best time</div><div class="v" id="sBest">—</div></div>
+        <div class="stat"><div class="k" title="Your slowest solve this session">Slowest</div><div class="v" id="sWorst">—</div></div>
+        <div class="stat ao5"><div class="k" title="Average of your last 5 solves, dropping the fastest and slowest (Ao5)">Avg of 5</div><div class="v" id="sAo5">—</div></div>
+        <div class="stat ao12"><div class="k" title="Average of your last 12 solves, dropping fastest & slowest (Ao12)">Avg of 12</div><div class="v" id="sAo12">—</div></div>
+        <div class="stat"><div class="k" title="Average of your last 50 solves (Ao50)">Avg of 50</div><div class="v" id="sAo50">—</div></div>
+        <div class="stat"><div class="k" title="Best average-of-5 you've hit any time this session">Best avg-5</div><div class="v" id="sBAo5">—</div></div>
+        <div class="stat"><div class="k" title="Best average-of-12 you've hit this session">Best avg-12</div><div class="v" id="sBAo12">—</div></div>
+        <div class="stat"><div class="k" title="Average of every solve (no drops)">Overall avg</div><div class="v" id="sMean">—</div></div>
+        <div class="stat"><div class="k" title="How much your times bounce around — lower is steadier (standard deviation)">Steadiness ±</div><div class="v" id="sSd">—</div></div>
+        <div class="stat" id="goalStat"><div class="k" title="How many solves beat your goal time">Beat goal</div><div class="v" id="sGoal">—</div></div>
+        <div class="stat"><div class="k" title="Average turns per second — type move counts below (TPS)">Turns/sec</div><div class="v" id="sTps">—</div></div>
+      </div>
+      <canvas id="graph" aria-label="Progress graph of your solve times"></canvas>
+    </div>
+
+    <div class="panel cam">
+      <h3>Camera <span class="r" id="camStatus">off</span></h3>
+      <div class="camview">
+        <video id="video" playsinline muted></video>
+        <div class="camoff" id="camoff">Tap <b>📷 Camera</b> and the camera watches your cube — it <b>auto-starts</b> the timer when you move and <b>auto-stops</b> when you finish.</div>
+      </div>
+      <div class="motionbar"><i id="motionFill"></i></div>
+      <div class="camrow"><span>Motion</span><span class="pill" id="motionPct">0%</span><span id="autoState"></span><span class="pill" id="turnLive" style="margin-left:auto;color:var(--g)"></span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="histhead">
+      <h3 style="margin:0">Solves</h3>
+      <button class="link" id="copyBtn">Copy times</button>
+      <button class="link" id="clearBtn">Clear session</button>
+    </div>
+    <div class="hist" id="hist"><div class="empty">No solves yet — do one and your times land here.</div></div>
+  </div>
+
+  <details class="help">
+    <summary>What do these mean? (plain-English guide)</summary>
+    <div class="helpgrid">
+      <div class="hcard"><b>Scramble notation</b><p>Letters are face turns: <code>R</code> right, <code>L</code> left, <code>U</code> up, <code>D</code> down, <code>F</code> front, <code>B</code> back. A plain letter = clockwise, <code>'</code> = counter-clockwise, <code>2</code> = half turn (180°). A <code>w</code> (e.g. <code>Rw</code>) turns two layers at once (big cubes). Just follow them left to right on a solved cube.</p></div>
+      <div class="hcard"><b>Ao5 &amp; Ao12 (averages)</b><p>The speedcuber standard: take your last 5 (or 12) solves, <b>throw out the fastest and the slowest</b>, and average what's left. This stops one lucky or unlucky solve from skewing the number, so it's a fairer picture of your real speed.</p></div>
+      <div class="hcard"><b>PB &amp; Best Ao5/Ao12</b><p><b>PB single</b> is your fastest one solve. <b>Best Ao5/Ao12</b> is the best rolling average you hit at any point this session — a new PB average is a bigger deal than a single lucky solve.</p></div>
+      <div class="hcard"><b>Consistency (±)</b><p>Standard deviation of your times. It says how much your solves bounce around. A low number means you're steady; a high number means some solves are much faster or slower than others.</p></div>
+      <div class="hcard"><b>+2 and DNF</b><p>Official penalties. <b>+2</b> adds two seconds (e.g. the cube was one move from solved) — shown with a <code>+</code>. <b>DNF</b> = Did Not Finish (the solve didn't count). Tap the buttons on any solve to set them.</p></div>
+      <div class="hcard"><b>Inspection &amp; TPS</b><p><b>Inspection</b> is the 15 seconds you're allowed to look before starting (over 15s = +2, over 17s = DNF). <b>TPS</b> = turns per second — type how many moves a solve took and it works out your speed. Higher TPS = faster hands.</p></div>
+      <div class="hcard"><b>Counting turns from the camera</b><p>Turn on <b>🔢 Count turns</b> and the camera counts the <b>bursts of motion</b> during a solve — each face turn makes one spike — and fills in the move count (shown with a <code>~</code> because it's an <b>estimate</b>). It can't tell R from U, and very fast hands blur turns together so it under-counts; it's most accurate on steady, learning-pace solves. Tune it with the sensitivity slider, and you can always type the exact number to correct it.</p></div>
+      <div class="hcard"><b>Camera auto-timer</b><p>The camera measures how much the picture changes each frame. When it jumps (you grab the cube) the timer starts; when it goes quiet (solved, hands away) it stops. Use the <b>sensitivity</b> slider if it triggers too early or too late. On claude.ai the camera is blocked in artifacts — open this on your local preview to use it.</p>
+        <div class="legend"><span><i style="background:var(--w)"></i>White (U)</span><span><i style="background:var(--y)"></i>Yellow (D)</span><span><i style="background:var(--g)"></i>Green (F)</span><span><i style="background:var(--b)"></i>Blue (B)</span><span><i style="background:var(--o)"></i>Orange (L)</span><span><i style="background:var(--r)"></i>Red (R)</span></div>
+      </div>
+    </div>
+  </details>
+
+</div>
+
+<div class="modal" id="customModal">
+  <div class="sheet">
+    <h2>🎨 Customize the look <button class="x" id="customX" aria-label="Close">✕</button></h2>
+    <div class="crow">
+      <div class="t">Accent colour</div>
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <div class="crow">
+      <div class="t">Theme</div>
+      <div class="seg" id="themeSeg">
+        <button data-th="light">☀️ Light</button>
+        <button data-th="dark">🌙 Dark</button>
+        <button data-th="">🖥️ Auto</button>
+      </div>
+    </div>
+    <div class="crow">
+      <div class="t">Background</div>
+      <div class="seg" id="bgSeg">
+        <button data-bg="flat">Flat</button>
+        <button data-bg="grad">Glow</button>
+        <button data-bg="dots">Dots</button>
+      </div>
+    </div>
+    <div class="crow">
+      <div class="t">Timer size — <span id="tsLbl">normal</span></div>
+      <input type="range" id="timeScale" min="70" max="140" value="100">
+    </div>
+    <div class="resetrow">
+      <button class="reset" id="customReset">Reset to default</button>
+      <button class="done" id="customDone">Done</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const LS="cubecam_v2";
+let data={}; // per-event: {solves:[...], bestAo5, bestAo12}
+let event="333";
+let scramble="";
+
+const EVENTS=[
+  {id:"222",name:"2×2"},{id:"333",name:"3×3"},{id:"444",name:"4×4"},{id:"555",name:"5×5"},
+  {id:"pyr",name:"Pyraminx"},{id:"skb",name:"Skewb"},{id:"oh",name:"One-handed"}
+];
+
+/* ---------- persistence ---------- */
+function load(){ try{const r=localStorage.getItem(LS); if(r)data=JSON.parse(r)||{};}catch(e){} }
+function save(){ try{localStorage.setItem(LS,JSON.stringify(data));}catch(e){} }
+function sess(){ if(!data[event]) data[event]={solves:[]}; return data[event]; }
+function solves(){ return sess().solves; }
+
+/* ---------- cube icon ---------- */
+(function(){const c=['--w','--r','--g','--y','--b','--o','--g','--w','--r'];const el=$('cubeico');c.forEach(k=>{const i=document.createElement('i');i.style.background=`var(${k})`;el.appendChild(i);});})();
+
+/* ---------- scramble generators ---------- */
+function rand(a){return a[Math.floor(Math.random()*a.length)];}
+function seqScramble(faces,len,opp,suf){
+  suf=suf||['','\'','2']; const out=[]; let last='',last2=''; const base=f=>f.replace('w','');
+  while(out.length<len){
+    const f=rand(faces); const bf=base(f);
+    if(bf===last)continue;                        // never the same face twice (incl. wide, e.g. no "U Uw")
+    if(opp&&opp[last]===bf&&bf===last2)continue;   // avoid wasteful A B A on one axis
+    out.push(f+rand(suf)); last2=last; last=bf;
+  }
+  return out.join(' ');
+}
+const OPP={U:'D',D:'U',L:'R',R:'L',F:'B',B:'F'};
+function makeScramble(){
+  if(event==='222') return seqScramble(['U','R','F'],11,{U:'',R:'',F:''});
+  if(event==='333'||event==='oh') return seqScramble(['U','D','L','R','F','B'],20,OPP);
+  if(event==='444') return seqScramble(['U','D','L','R','F','B','Uw','Dw','Lw','Rw','Fw','Bw'],44,OPP);
+  if(event==='555') return seqScramble(['U','D','L','R','F','B','Uw','Dw','Lw','Rw','Fw','Bw'],60,OPP);
+  if(event==='pyr'){ const body=seqScramble(['U','L','R','B'],10,null,['','\'']); const tips=['u','l','r','b'].filter(()=>Math.random()<0.6).map(t=>t+rand(['','\''])).join(' '); return (body+' '+tips).trim(); }
+  if(event==='skb') return seqScramble(['U','L','R','B'],9,null,['','\'']);
+  return seqScramble(['U','D','L','R','F','B'],20,OPP);
+}
+function newScramble(){ scramble=makeScramble(); $('scramText').innerHTML=scramble.split(' ').filter(Boolean).map(m=>'<span class="mv">'+m+'</span>').join(' '); }
+
+/* ---------- time / averages ---------- */
+function fmt(ms){ if(ms==null)return '—'; if(ms===Infinity)return 'DNF'; const t=ms/1000;
+  if(t>=60){const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(2);} return t.toFixed(2); }
+function effMs(s){ if(s.pen==='dnf')return Infinity; return s.ms+(s.pen==='+2'?2000:0); }
+function dispTime(s){ if(s.pen==='dnf')return 'DNF'; return fmt(effMs(s))+(s.pen==='+2'?'+':''); }
+function avgOf(list){ const n=list.length; if(n<3)return null;
+  if(list.filter(x=>x===Infinity).length>=2)return Infinity;
+  const sorted=[...list].sort((a,b)=>a-b); const trimmed=sorted.slice(1,n-1);
+  return trimmed.reduce((a,b)=>a+b,0)/trimmed.length; }
+function lastN(n){ return solves().slice(-n).map(effMs); }
+function bestRollingAvg(n){ const arr=solves().map(effMs); if(arr.length<n)return null; let best=Infinity;
+  for(let i=0;i+n<=arr.length;i++){ const a=avgOf(arr.slice(i,i+n)); if(a!=null&&a<best)best=a; } return best===Infinity?null:best; }
+
+/* ---------- stats ---------- */
+function goalMs(){ const v=parseFloat($('goal').value); return isFinite(v)&&v>0? v*1000 : null; }
+function stats(){
+  const sv=solves(); const effs=sv.map(effMs); const valid=effs.filter(x=>x!==Infinity);
+  $('statN').textContent=sv.length+' solve'+(sv.length===1?'':'s');
+  const best=valid.length?Math.min(...valid):null, worst=valid.length?Math.max(...valid):null;
+  const mean=valid.length?valid.reduce((a,b)=>a+b,0)/valid.length:null;
+  const cur=sv.length?effs[effs.length-1]:null;
+  let sd=null; if(valid.length>=2){const m=mean;sd=Math.sqrt(valid.reduce((a,b)=>a+(b-m)*(b-m),0)/valid.length);}
+  $('sCur').textContent=cur==null?'—':fmt(cur);
+  $('sBest').textContent=fmt(best); $('sWorst').textContent=fmt(worst); $('sMean').textContent=fmt(mean);
+  $('sSd').textContent=sd==null?'—':'±'+(sd/1000).toFixed(2);
+  $('sAo5').textContent=sv.length>=5?fmt(avgOf(lastN(5))):'—';
+  $('sAo12').textContent=sv.length>=12?fmt(avgOf(lastN(12))):'—';
+  $('sAo50').textContent=sv.length>=50?fmt(avgOf(lastN(50))):'—';
+  $('sBAo5').textContent=fmt(bestRollingAvg(5)); $('sBAo12').textContent=fmt(bestRollingAvg(12));
+  // goal
+  const g=goalMs(); const gs=$('goalStat');
+  if(g){ const under=valid.filter(x=>x<=g).length; $('sGoal').textContent=under+'/'+valid.length;
+    gs.className='stat '+(valid.length&&under/valid.length>=0.5?'beat':(under?'':'miss')); }
+  else { $('sGoal').textContent='—'; gs.className='stat'; }
+  // tps
+  const wm=sv.filter(s=>s.pen!=='dnf'&&s.moves>0);
+  $('sTps').textContent=wm.length? (wm.reduce((a,s)=>a+s.moves/(effMs(s)/1000),0)/wm.length).toFixed(2) : '—';
+  drawGraph();
+}
+
+/* ---------- progress graph ---------- */
+function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function drawGraph(){
+  const cv=$('graph'); const dpr=Math.min(2,devicePixelRatio||1);
+  const w=cv.clientWidth||600, h=cv.clientHeight||92; cv.width=w*dpr; cv.height=h*dpr;
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  const pts=solves().map(effMs).filter(x=>x!==Infinity); if(pts.length<2)return;
+  const show=pts.slice(-80); const mn=Math.min(...show),mx=Math.max(...show),pad=8;
+  const X=i=>pad+i/(show.length-1)*(w-2*pad), Y=v=>h-pad-(mx===mn?0.5:(v-mn)/(mx-mn))*(h-2*pad);
+  // best line
+  ctx.strokeStyle=cssv('--go'); ctx.globalAlpha=.4; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(pad,Y(mn)); ctx.lineTo(w-pad,Y(mn)); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
+  // area + line
+  ctx.beginPath(); show.forEach((v,i)=>{const x=X(i),y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.lineTo(w-pad,h-pad); ctx.lineTo(pad,h-pad); ctx.closePath();
+  const grd=ctx.createLinearGradient(0,0,0,h); grd.addColorStop(0,cssv('--accent')+'55'); grd.addColorStop(1,cssv('--accent')+'00'); ctx.fillStyle=grd; ctx.fill();
+  ctx.beginPath(); show.forEach((v,i)=>{const x=X(i),y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.strokeStyle=cssv('--accent'); ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  // endpoint
+  const lx=X(show.length-1),ly=Y(show[show.length-1]); ctx.fillStyle=cssv('--accent'); ctx.beginPath(); ctx.arc(lx,ly,3.2,0,7); ctx.fill();
+}
+
+/* ---------- history ---------- */
+function renderHist(){
+  const el=$('hist'); const sv=solves();
+  if(!sv.length){ el.innerHTML='<div class="empty">No solves yet — do one and your times land here.</div>'; stats(); return; }
+  const valid=sv.map(effMs).filter(x=>x!==Infinity); const best=valid.length?Math.min(...valid):null;
+  el.innerHTML='';
+  sv.map((s,idx)=>({s,idx})).reverse().forEach(({s,idx})=>{
+    const isPB=s.pen!=='dnf'&&effMs(s)===best;
+    const tps=(s.pen!=='dnf'&&s.moves>0)?('· '+(s.movesEst?'~':'')+s.moves+' moves · '+(s.moves/(effMs(s)/1000)).toFixed(2)+' tps'):'';
+    const row=document.createElement('div'); row.className='hrow';
+    row.innerHTML='<span class="n">'+(idx+1)+'</span>'+
+      '<span><span class="t '+(s.pen==='dnf'?'dnf':(isPB?'pb':''))+'">'+dispTime(s)+(isPB?' ⭐':'')+'</span><span class="meta">'+tps+'</span></span>'+
+      '<span class="acts">'+
+        '<input class="mv" type="number" min="0" placeholder="mv" value="'+(s.moves||'')+'" data-mv="'+idx+'" aria-label="move count">'+
+        '<button class="'+(s.pen==='+2'?'on':'')+'" data-p2="'+idx+'">+2</button>'+
+        '<button class="'+(s.pen==='dnf'?'on dnf':'')+'" data-dnf="'+idx+'">DNF</button>'+
+        '<button data-del="'+idx+'">✕</button></span>';
+    el.appendChild(row);
+  });
+  el.querySelectorAll('[data-p2]').forEach(b=>b.onclick=()=>{const i=+b.dataset.p2;const s=solves()[i];s.pen=s.pen==='+2'?'':'+2';save();renderHist();});
+  el.querySelectorAll('[data-dnf]').forEach(b=>b.onclick=()=>{const i=+b.dataset.dnf;const s=solves()[i];s.pen=s.pen==='dnf'?'':'dnf';save();renderHist();});
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{solves().splice(+b.dataset.del,1);save();renderHist();});
+  el.querySelectorAll('[data-mv]').forEach(inp=>inp.onchange=()=>{const v=parseInt(inp.value,10);const s=solves()[+inp.dataset.mv];s.moves=(v>0?v:null);s.movesEst=false;save();renderHist();});
+  stats();
+}
+
+/* ---------- timer state machine ---------- */
+const face=$('face'),timeEl=$('time'),hintEl=$('hint');
+let state='idle',holdT=0,startAt=0,raf=0,inspStart=0,penNext='';
+function setFace(c){face.className='face'+(c?' '+c:'');}
+function show(ms){timeEl.textContent=fmt(ms);}
+function defaultHint(){ return autoOn()?'Camera auto-timer armed — move the cube to start':'Hold Space (or press & hold here), release to start'; }
+function beginHold(){
+  if(state==='run'){stopSolve();return;}
+  if(state==='inspect'){state='holdInsp';holdT=performance.now();setFace('hold');hintEl.textContent='Keep holding…';return;}
+  if(state==='idle'){ if($('optInspect').checked){startInspection();return;} state='hold';holdT=performance.now();setFace('hold');hintEl.textContent='Keep holding…';show(0); }
+}
+function releaseHold(){
+  if(state==='hold'){ if(performance.now()-holdT>=250)startSolve(); else {state='idle';setFace('');hintEl.textContent=defaultHint();} }
+  else if(state==='holdInsp'){ if(performance.now()-holdT>=250)startSolve(); else {state='inspect';setFace('insp');} }
+}
+function armLoop(){ if((state==='hold'||state==='holdInsp')&&performance.now()-holdT>=250){setFace('armed');hintEl.textContent='Release to GO!';} requestAnimationFrame(armLoop); }
+function startInspection(){
+  state='inspect';inspStart=performance.now();penNext='';setFace('insp');hintEl.textContent='Inspection — hold to get ready';
+  cancelAnimationFrame(raf); const loop=()=>{ if(state!=='inspect'&&state!=='holdInsp')return; const left=15-(performance.now()-inspStart)/1000;
+    timeEl.textContent=left>0?Math.ceil(left).toString():(left>-2?'+2':'DNF'); penNext=left<=-2?'dnf':(left<=0?'+2':''); raf=requestAnimationFrame(loop); }; raf=requestAnimationFrame(loop);
+}
+function startSolve(){ state='run';setFace('run');hintEl.textContent='Solving… press / tap to stop';startAt=performance.now();
+  turnCount=0;turnArmed=false;lastTurnAt=0; if($('optTurns').checked&&stream)$('turnLive').textContent='~0 turns';
+  cancelAnimationFrame(raf); const loop=()=>{ if(state!=='run')return; show(performance.now()-startAt); raf=requestAnimationFrame(loop); }; raf=requestAnimationFrame(loop); }
+function stopSolve(){ if(state!=='run')return; cancelAnimationFrame(raf);
+  const ms=performance.now()-startAt; state='idle';setFace('');show(ms);
+  const estMoves=($('optTurns').checked&&stream&&turnCount>0)?turnCount:null;
+  solves().push({ms,pen:penNext||'',moves:estMoves,movesEst:!!estMoves,scramble}); penNext=''; save(); renderHist();
+  $('penrow').hidden=false; hintEl.textContent=(estMoves?('Saved · ~'+estMoves+' turns counted · '):'Saved · ')+defaultHint(); newScramble(); }
+$('btnPlus2').onclick=()=>{const sv=solves();if(!sv.length)return;const s=sv[sv.length-1];s.pen=s.pen==='+2'?'':'+2';save();renderHist();};
+$('btnDNF').onclick=()=>{const sv=solves();if(!sv.length)return;const s=sv[sv.length-1];s.pen=s.pen==='dnf'?'':'dnf';save();renderHist();};
+$('btnRedo').onclick=newScramble;
+
+/* input */
+let spaceDown=false;
+addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT')return; if(e.code==='Space'){e.preventDefault();if(spaceDown)return;spaceDown=true;beginHold();} });
+addEventListener('keyup',e=>{ if(e.code==='Space'){e.preventDefault();spaceDown=false;releaseHold();} });
+face.addEventListener('pointerdown',e=>{e.preventDefault();face.setPointerCapture?.(e.pointerId);beginHold();});
+face.addEventListener('pointerup',e=>{e.preventDefault();releaseHold();});
+armLoop();
+
+/* ---------- camera + motion ---------- */
+let stream=null,mcanvas=document.createElement('canvas'),mctx=mcanvas.getContext('2d',{willReadFrequently:true});
+let prev=null,motion=0,lowSince=0,highSince=0,running=false; mcanvas.width=64;mcanvas.height=48;
+let turnCount=0,turnArmed=false,lastTurnAt=0; // camera turn-counting (motion-pulse estimate)
+function autoOn(){return $('optAuto').checked&&stream;}
+function detectTurn(pct){ // each burst of motion above the threshold = one estimated turn
+  if(!($('optTurns').checked&&stream&&state==='run'))return;
+  const hi=(+$('sens').value)+4, lo=Math.max(3,(+$('sens').value)*0.5), now=performance.now();
+  if(!turnArmed && pct>=hi && now-lastTurnAt>80){ turnCount++; turnArmed=true; lastTurnAt=now; $('turnLive').textContent='~'+turnCount+' turns'; }
+  else if(turnArmed && pct<lo){ turnArmed=false; }
+}
+async function toggleCam(){
+  if(stream){stopCam();return;}
+  $('camoff').scrollIntoView({behavior:'smooth',block:'center'}); toast('Opening camera…');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camUnavailable('<b>Camera isn\'t available here.</b><br>claude.ai blocks the camera inside shared pages — open this in a normal web browser (on a computer or phone with a webcam) to use it.');return;}
+  try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:480}},audio:false});
+    const v=$('video'); v.srcObject=stream; await v.play(); $('camoff').hidden=true; $('camStatus').textContent='on'; $('camBtn').textContent='📷 Stop';
+    running=true; prev=null; motionLoop(); $('optAuto').checked=true; hintEl.textContent=defaultHint();
+  }catch(err){ camUnavailable('<b>Camera is blocked here.</b><br>claude.ai blocks the camera inside shared pages. Open this in a normal web browser (a computer or phone with a webcam) and tap 📷 Camera → <b>Allow</b> to use it.'); }
+}
+function camUnavailable(m){stream=null;$('camoff').hidden=false;$('camoff').innerHTML=m;$('camStatus').textContent='blocked here';$('optAuto').checked=false;$('optTurns').checked=false;toast('📷 Camera blocked here — use a normal browser');}
+function stopCam(){ if(stream)stream.getTracks().forEach(t=>t.stop()); stream=null;running=false;$('camoff').hidden=false;$('camStatus').textContent='off';$('camBtn').textContent='📷 Camera';$('motionFill').style.width='0%';$('motionPct').textContent='0%';$('autoState').textContent=''; }
+function motionLoop(){ if(!running)return; const v=$('video');
+  if(v.readyState>=2){ mctx.drawImage(v,0,0,64,48); const cur=mctx.getImageData(0,0,64,48).data;
+    if(prev){ let d=0; for(let i=0;i<cur.length;i+=4)d+=Math.abs(cur[i]-prev[i])+Math.abs(cur[i+1]-prev[i+1])+Math.abs(cur[i+2]-prev[i+2]);
+      const norm=d/(64*48*3*255)*600; motion=motion*0.6+Math.min(100,norm)*0.4; }
+    prev=cur.slice(0); const pct=Math.round(motion); $('motionFill').style.width=Math.min(100,pct)+'%'; $('motionPct').textContent=pct+'%'; autoTimer(pct); detectTurn(pct);
+  } requestAnimationFrame(motionLoop);
+}
+function autoTimer(pct){ if(!autoOn()){$('autoState').textContent='';return;} const thr=+$('sens').value,now=performance.now();
+  if(state==='run'){ $('autoState').textContent='· solving'; if(pct<thr){if(!lowSince)lowSince=now; if(now-lowSince>1100){stopSolve();lowSince=0;}}else lowSince=0; }
+  else if(state==='idle'){ $('autoState').textContent='· watching'; if(pct>thr+6){if(!highSince)highSince=now; if(now-highSince>120){startSolve();highSince=0;}}else highSince=0; }
+  else if(state==='inspect'||state==='holdInsp'){ $('autoState').textContent='· inspection'; if(pct>thr+6)startSolve(); }
+}
+$('camBtn').onclick=toggleCam;
+
+/* ---------- events, copy, misc ---------- */
+(function(){const el=$('events');EVENTS.forEach(e=>{const b=document.createElement('button');b.textContent=e.name;b.dataset.e=e.id;b.onclick=()=>{event=e.id;[...el.children].forEach(c=>c.classList.toggle('on',c.dataset.e===event));newScramble();renderHist();try{localStorage.setItem('cubecam_evt',event);}catch(_){}} ;el.appendChild(b);});})();
+function selEvent(id){event=id;[...$('events').children].forEach(c=>c.classList.toggle('on',c.dataset.e===id));}
+$('newScram').onclick=newScramble;
+$('clearBtn').onclick=()=>{ sess().solves=[]; save(); renderHist(); };
+$('goal').oninput=stats;
+$('optAuto').onchange=()=>{ if($('optAuto').checked&&!stream)toggleCam(); hintEl.textContent=defaultHint(); };
+$('optTurns').onchange=()=>{ if($('optTurns').checked&&!stream)toggleCam(); if(!$('optTurns').checked)$('turnLive').textContent=''; };
+$('optInspect').onchange=()=>{hintEl.textContent=defaultHint();};
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1400);}
+$('copyBtn').onclick=async()=>{ const sv=solves(); if(!sv.length){toast('No solves to copy');return;}
+  const lines=sv.map((s,i)=>(i+1)+'. '+dispTime(s)+(s.moves?(' ['+s.moves+'mv]'):''));
+  const txt=EVENTS.find(e=>e.id===event).name+' session — '+sv.length+' solves\nAo5 '+$('sAo5').textContent+'  Ao12 '+$('sAo12').textContent+'  mean '+$('sMean').textContent+'\n'+lines.join('\n');
+  try{ await navigator.clipboard.writeText(txt); toast('Copied '+sv.length+' solves'); }catch(e){ toast('Copy blocked — select the times manually'); } };
+
+/* theme */
+function applyTheme(t){ t?document.documentElement.setAttribute('data-theme',t):document.documentElement.removeAttribute('data-theme'); }
+let theme=null; try{theme=localStorage.getItem('cubecam_theme');}catch(e){} applyTheme(theme);
+$('themeBtn').onclick=()=>{ const cur=document.documentElement.getAttribute('data-theme'); const dark=cur==='dark'||(!cur&&matchMedia('(prefers-color-scheme:dark)').matches); theme=dark?'light':'dark'; applyTheme(theme); try{localStorage.setItem('cubecam_theme',theme);}catch(e){} drawGraph(); };
+addEventListener('resize',drawGraph);
+
+/* ---------- customize the look ---------- */
+const ACCENTS=['#0051ba','#009e60','#c41e3a','#ff5a1f','#7c3aed','#e5308a','#0ea5a5','#f0a500','#111827'];
+let look={accent:null,bg:'flat',timeScale:100};
+try{const r=localStorage.getItem('cubecam_look'); if(r)look=Object.assign(look,JSON.parse(r)||{});}catch(e){}
+function saveLook(){ try{localStorage.setItem('cubecam_look',JSON.stringify(look));}catch(e){} }
+function buildSwatches(){ const el=$('swatches'); el.innerHTML='';
+  ACCENTS.forEach(c=>{const s=document.createElement('div');s.className='swatch'+((look.accent||ACCENTS[0])===c?' on':'');s.style.background=c;s.title=c;s.onclick=()=>{look.accent=c;saveLook();applyLook();};el.appendChild(s);});
+  const cust=document.createElement('label');cust.className='swatch custom';cust.title='Pick any colour';cust.innerHTML='🎨<input type="color" value="'+(look.accent||ACCENTS[0])+'">';
+  cust.querySelector('input').oninput=e=>{look.accent=e.target.value;saveLook();applyLook();}; el.appendChild(cust); }
+function applyLook(){ const root=document.documentElement;
+  if(look.accent)root.style.setProperty('--accent',look.accent); else root.style.removeProperty('--accent');
+  root.style.setProperty('--timeScale',(look.timeScale/100).toFixed(2));
+  document.body.classList.remove('bg-grad','bg-dots'); if(look.bg&&look.bg!=='flat')document.body.classList.add('bg-'+look.bg);
+  buildSwatches();
+  [...$('bgSeg').children].forEach(b=>b.classList.toggle('on',b.dataset.bg===(look.bg||'flat')));
+  const curTheme=document.documentElement.getAttribute('data-theme')||'';
+  [...$('themeSeg').children].forEach(b=>b.classList.toggle('on',b.dataset.th===curTheme));
+  $('timeScale').value=look.timeScale; $('tsLbl').textContent=look.timeScale<90?'small':(look.timeScale>115?'big':'normal');
+  drawGraph(); }
+$('customBtn').onclick=()=>{ applyLook(); $('customModal').classList.add('on'); };
+$('customX').onclick=()=>$('customModal').classList.remove('on');
+$('customDone').onclick=()=>$('customModal').classList.remove('on');
+$('customModal').addEventListener('click',e=>{ if(e.target===$('customModal'))$('customModal').classList.remove('on'); });
+$('themeSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; theme=b.dataset.th||null; applyTheme(theme); try{localStorage.setItem('cubecam_theme',theme||'');}catch(_){} applyLook(); };
+$('bgSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; look.bg=b.dataset.bg; saveLook(); applyLook(); };
+$('timeScale').oninput=()=>{ look.timeScale=+$('timeScale').value; saveLook(); applyLook(); };
+$('customReset').onclick=()=>{ look={accent:null,bg:'flat',timeScale:100}; saveLook(); theme=null; applyTheme(null); try{localStorage.removeItem('cubecam_theme');}catch(_){} applyLook(); toast('Reset to default'); };
+applyLook();
+
+/* boot */
+load(); try{const e=localStorage.getItem('cubecam_evt');if(e)event=e;}catch(_){} selEvent(event); newScramble(); renderHist(); hintEl.textContent=defaultHint();
+</script>
+</body>
+</html>
