@@ -503,7 +503,7 @@ async function toggleCam(){
   try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:480}},audio:false});
     const v=$('video'); v.srcObject=stream; await v.play(); $('camoff').hidden=true; $('focusbox').classList.add('on'); $('camStatus').textContent='on'; $('camBtn').textContent='📷 Stop';
     running=true; prev=null; noiseFloor=6; motionLoop(); $('optAuto').checked=true; hintEl.textContent=defaultHint(); toast('Camera on — aim the cube in the box');
-  }catch(err){ camUnavailable('<b>Camera is blocked here.</b><br>claude.ai blocks the camera inside shared pages. Open this in a normal web browser (a computer or phone with a webcam) and tap 📷 Camera → <b>Allow</b> to use it.'); }
+  }catch(err){ camUnavailable('<b>Camera is blocked.</b><br>If you tapped <b>Block</b> by accident: tap the 🔒 / camera icon at the left of the address bar, set <b>Camera → Allow</b>, and reload.<br><span style="opacity:.75">(On the claude.ai link the camera is always blocked — use a normal browser like Brave/Chrome/Safari.)</span>'); }
 }
 function camUnavailable(m){stream=null;$('camoff').hidden=false;$('focusbox').classList.remove('on');$('camoff').innerHTML=m;$('camStatus').textContent='blocked here';$('optAuto').checked=false;$('optTurns').checked=false;toast('📷 Camera blocked here — use a normal browser');}
 function stopCam(){ if(stream)stream.getTracks().forEach(t=>t.stop()); stream=null;running=false;$('camoff').hidden=false;$('focusbox').classList.remove('on');$('camStatus').textContent='off';$('camBtn').textContent='📷 Camera';$('motionFill').style.width='0%';$('motionPct').textContent='0%';$('autoState').textContent='';$('turnLive').textContent=''; }
